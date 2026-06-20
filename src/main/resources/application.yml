@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: cloud-data-base
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cloud_storage
+    username: cloud_storage
+    password: cloud_storage
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 128MB
+      max-request-size: 512MB
+  session:
+    redis:
+      namespace: cloud-storage:sessions
+
+server:
+  error:
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  storage:
+    endpoint: http://localhost:9000
+    bucket: user-files
+    access-key: minioadmin
+    secret-key: minioadmin
+    user-root-prefix-pattern: user-%d-files
