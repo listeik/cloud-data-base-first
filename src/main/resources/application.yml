@@ -2,7 +2,7 @@ spring:
   application:
     name: cloud-data-base
   datasource:
-    url: jdbc:postgresql://localhost:5432/cloud_storage
+    url: jdbc:postgresql://localhost:5433/cloud_storage
     username: cloud_storage
     password: cloud_storage
   data:

@@ -25,13 +25,21 @@ MinIO console: http://localhost:9001
 
 Default credentials:
 
-- PostgreSQL: `cloud_storage` / `cloud_storage`
+- PostgreSQL: `localhost:5433`, database/user/password: `cloud_storage`
 - MinIO: `minioadmin` / `minioadmin`
+
+## Что уже есть
+
+- Регистрация, вход, выход и текущий пользователь через Spring Security session auth.
+- Пользователи в PostgreSQL, миграции Flyway.
+- Redis-backed HTTP sessions.
+- MinIO bucket и пользовательский root-prefix при регистрации.
+- API ресурсов: загрузка, скачивание файла, скачивание директории ZIP-архивом, список директории, создание директории, поиск, перемещение, удаление.
+- Базовая обработка ошибок и unit-тесты для auth/path/service-слоя.
 
 ## Следующие этапы
 
-1. Реализовать регистрацию и вход через Spring Security.
-2. Создавать пользовательский root-prefix в MinIO после регистрации.
-3. Реализовать операции `upload`, `list`, `download`, `move`, `delete`.
-4. Добавить интеграционные тесты для пользователей и MinIO.
-5. Подключить OpenAPI/Swagger, когда совместимая версия будет доступна для Spring Boot 4.1.
+1. Добавить интеграционные тесты на Testcontainers для PostgreSQL, Redis и MinIO.
+2. Добавить OpenAPI/Swagger, когда совместимая версия будет доступна для Spring Boot 4.1.
+3. Ввести квоты пользователя, лимиты размера файлов и пагинацию списков.
+4. Подготовить frontend или Postman/HTTP collection для ручного тестирования API.
