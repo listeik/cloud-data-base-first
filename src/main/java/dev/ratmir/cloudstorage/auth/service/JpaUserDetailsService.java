@@ -3,7 +3,6 @@ package dev.ratmir.cloudstorage.auth.service;
 import dev.ratmir.cloudstorage.user.UserAccount;
 import dev.ratmir.cloudstorage.user.UserAccountRepository;
 
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -28,10 +27,6 @@ class JpaUserDetailsService implements UserDetailsService {
 	}
 
 	private UserDetails toUserDetails(UserAccount account) {
-		return User.withUsername(account.getUsername())
-				.password(account.getPasswordHash())
-				.disabled(!account.isEnabled())
-				.roles("USER")
-				.build();
+		return AuthenticatedUser.from(account);
 	}
 }
