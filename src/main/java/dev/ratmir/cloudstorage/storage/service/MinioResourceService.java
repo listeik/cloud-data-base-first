@@ -1,12 +1,15 @@
 package dev.ratmir.cloudstorage.storage.service;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
-import dev.ratmir.cloudstorage.api.FeatureNotImplementedException;
 import dev.ratmir.cloudstorage.auth.service.CurrentUserProvider;
 import dev.ratmir.cloudstorage.storage.ResourcePath;
 import dev.ratmir.cloudstorage.storage.StorageOperationException;
@@ -89,11 +92,11 @@ class MinioResourceService implements ResourceService, DirectoryService {
 	@Override
 	public DownloadedResource download(String path) {
 		var resource = ResourcePath.resource(path);
+		var storage = currentStorage();
 		if (resource.directory()) {
-			throw new FeatureNotImplementedException("Directory download as zip is not implemented yet");
+			return downloadDirectory(storage, resource);
 		}
 
-		var storage = currentStorage();
 		var objectName = storage.absolute(resource.value());
 		var stat = statObject(objectName).orElseThrow(() -> notFound("Resource not found"));
 		try {
@@ -179,6 +182,62 @@ class MinioResourceService implements ResourceService, DirectoryService {
 			uploaded.add(uploadFile(storage, directory.value(), file));
 		}
 		return uploaded;
+	}
+
+	private DownloadedResource downloadDirectory(UserStorage storage, ResourcePath resource) {
+		if (!directoryExists(storage, resource.value())) {
+			throw notFound("Directory not found");
+		}
+		try {
+			var archive = buildZipArchive(storage, resource.value());
+			return new DownloadedResource(
+					resourceName(resource.value()) + ".zip",
+					MediaType.parseMediaType("application/zip"),
+					new InputStreamResource(new ByteArrayInputStream(archive)),
+					archive.length);
+		}
+		catch (IOException exception) {
+			throw new StorageOperationException("Failed to archive directory", exception);
+		}
+	}
+
+	private byte[] buildZipArchive(UserStorage storage, String directory) throws IOException {
+		var output = new ByteArrayOutputStream();
+		try (var zip = new ZipOutputStream(output)) {
+			var objects = minioClient.listObjects(ListObjectsArgs.builder()
+					.bucket(properties.bucket())
+					.prefix(storage.absolute(directory))
+					.recursive(true)
+					.build());
+			for (var result : objects) {
+				var item = getItem(result, "Failed to archive directory");
+				var relative = storage.relative(item.objectName());
+				var entryName = relative.substring(directory.length());
+				if (entryName.isEmpty()) {
+					continue;
+				}
+				if (item.isDir() || relative.endsWith("/")) {
+					zip.putNextEntry(new ZipEntry(entryName.endsWith("/") ? entryName : entryName + "/"));
+					zip.closeEntry();
+					continue;
+				}
+				zip.putNextEntry(new ZipEntry(entryName));
+				try (var input = minioClient.getObject(GetObjectArgs.builder()
+						.bucket(properties.bucket())
+						.object(item.objectName())
+						.build())) {
+					input.transferTo(zip);
+				}
+				catch (IOException exception) {
+					throw exception;
+				}
+				catch (Exception exception) {
+					throw new StorageOperationException("Failed to read directory resource", exception);
+				}
+				zip.closeEntry();
+			}
+		}
+		return output.toByteArray();
 	}
 
 	@Override
@@ -306,6 +365,15 @@ class MinioResourceService implements ResourceService, DirectoryService {
 		}
 		catch (Exception exception) {
 			throw new StorageOperationException("Failed to copy resource", exception);
+		}
+	}
+
+	private static Item getItem(Result<Item> result, String message) {
+		try {
+			return result.get();
+		}
+		catch (Exception exception) {
+			throw new StorageOperationException(message, exception);
 		}
 	}
 
