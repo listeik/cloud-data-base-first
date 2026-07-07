@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import dev.ratmir.cloudstorage.auth.api.AuthRequest;
+import dev.ratmir.cloudstorage.storage.service.ObjectStorageService;
 import dev.ratmir.cloudstorage.user.UserAccount;
 import dev.ratmir.cloudstorage.user.UserAccountRepository;
 
@@ -29,6 +30,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 class DefaultAuthServiceTest {
@@ -38,10 +40,16 @@ class DefaultAuthServiceTest {
 	private final AuthenticationManager authenticationManager = org.mockito.Mockito.mock(AuthenticationManager.class);
 	private final SecurityContextRepository securityContextRepository =
 			org.mockito.Mockito.mock(SecurityContextRepository.class);
+	private final ObjectStorageService objectStorageService = org.mockito.Mockito.mock(ObjectStorageService.class);
 	private final HttpServletRequest httpRequest = org.mockito.Mockito.mock(HttpServletRequest.class);
 	private final HttpServletResponse httpResponse = org.mockito.Mockito.mock(HttpServletResponse.class);
 	private final DefaultAuthService authService =
-			new DefaultAuthService(users, passwordEncoder, authenticationManager, securityContextRepository);
+			new DefaultAuthService(
+					users,
+					passwordEncoder,
+					authenticationManager,
+					securityContextRepository,
+					objectStorageService);
 
 	@AfterEach
 	void clearSecurityContext() {
@@ -58,7 +66,11 @@ class DefaultAuthServiceTest {
 
 		when(users.existsByUsername("user_1")).thenReturn(false);
 		when(passwordEncoder.encode("password123")).thenReturn("encoded-password");
-		when(users.saveAndFlush(any(UserAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(users.saveAndFlush(any(UserAccount.class))).thenAnswer(invocation -> {
+			var account = invocation.getArgument(0, UserAccount.class);
+			ReflectionTestUtils.setField(account, "id", 42L);
+			return account;
+		});
 		when(authenticationManager.authenticate(any())).thenReturn(authentication);
 
 		var response = authService.signUp(request, httpRequest, httpResponse);
@@ -69,6 +81,7 @@ class DefaultAuthServiceTest {
 		verify(users).saveAndFlush(account.capture());
 		assertEquals("user_1", account.getValue().getUsername());
 		assertEquals("encoded-password", account.getValue().getPasswordHash());
+		verify(objectStorageService).ensureUserRoot(42L);
 		verify(securityContextRepository).saveContext(any(SecurityContext.class), eq(httpRequest), eq(httpResponse));
 	}
 

@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import dev.ratmir.cloudstorage.auth.api.AuthRequest;
 import dev.ratmir.cloudstorage.auth.api.UserResponse;
+import dev.ratmir.cloudstorage.storage.service.ObjectStorageService;
 import dev.ratmir.cloudstorage.user.UserAccount;
 import dev.ratmir.cloudstorage.user.UserAccountRepository;
 
@@ -28,6 +29,7 @@ class DefaultAuthService implements AuthService {
 	private final PasswordEncoder passwordEncoder;
 	private final AuthenticationManager authenticationManager;
 	private final SecurityContextRepository securityContextRepository;
+	private final ObjectStorageService objectStorageService;
 	private final SecurityContextHolderStrategy securityContextHolderStrategy =
 			SecurityContextHolder.getContextHolderStrategy();
 
@@ -35,11 +37,13 @@ class DefaultAuthService implements AuthService {
 			UserAccountRepository users,
 			PasswordEncoder passwordEncoder,
 			AuthenticationManager authenticationManager,
-			SecurityContextRepository securityContextRepository) {
+			SecurityContextRepository securityContextRepository,
+			ObjectStorageService objectStorageService) {
 		this.users = users;
 		this.passwordEncoder = passwordEncoder;
 		this.authenticationManager = authenticationManager;
 		this.securityContextRepository = securityContextRepository;
+		this.objectStorageService = objectStorageService;
 	}
 
 	@Override
@@ -59,6 +63,10 @@ class DefaultAuthService implements AuthService {
 		catch (DataIntegrityViolationException exception) {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "Username is already taken", exception);
 		}
+		if (account.getId() == null) {
+			throw new IllegalStateException("User id must be available after save");
+		}
+		objectStorageService.ensureUserRoot(account.getId());
 
 		return authenticate(request, httpRequest, httpResponse);
 	}
