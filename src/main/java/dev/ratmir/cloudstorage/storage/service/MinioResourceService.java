@@ -13,12 +13,14 @@ import dev.ratmir.cloudstorage.storage.StorageOperationException;
 import dev.ratmir.cloudstorage.storage.StorageProperties;
 import dev.ratmir.cloudstorage.storage.api.ResourceResponse;
 import dev.ratmir.cloudstorage.storage.api.ResourceType;
+import io.minio.CopyObjectArgs;
 import io.minio.GetObjectArgs;
 import io.minio.ListObjectsArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.Result;
+import io.minio.SourceObject;
 import io.minio.StatObjectArgs;
 import io.minio.StatObjectResponse;
 import io.minio.errors.ErrorResponseException;
@@ -115,12 +117,49 @@ class MinioResourceService implements ResourceService, DirectoryService {
 
 	@Override
 	public ResourceResponse move(String from, String to) {
-		throw new FeatureNotImplementedException("Resource move is not implemented yet");
+		var source = ResourcePath.resource(from);
+		var storage = currentStorage();
+		if (source.directory()) {
+			var target = ResourcePath.directory(to, false);
+			return moveDirectory(storage, source, target);
+		}
+		var target = ResourcePath.file(to);
+		return moveFile(storage, source, target);
 	}
 
 	@Override
 	public List<ResourceResponse> search(String query) {
-		throw new FeatureNotImplementedException("Resource search is not implemented yet");
+		if (query == null || query.isBlank()) {
+			throw new IllegalArgumentException("Search query must not be blank");
+		}
+		var storage = currentStorage();
+		var normalizedQuery = query.toLowerCase();
+		var resources = new ArrayList<ResourceResponse>();
+		try {
+			var objects = minioClient.listObjects(ListObjectsArgs.builder()
+					.bucket(properties.bucket())
+					.prefix(storage.rootPrefix())
+					.recursive(true)
+					.build());
+			for (var result : objects) {
+				var item = result.get();
+				var relative = storage.relative(item.objectName());
+				if (relative.isEmpty()) {
+					continue;
+				}
+				var name = resourceName(relative).toLowerCase();
+				if (name.contains(normalizedQuery)) {
+					resources.add(toResponse(relative, item.size(), item.isDir() || relative.endsWith("/")));
+				}
+			}
+		}
+		catch (Exception exception) {
+			throw new StorageOperationException("Failed to search resources", exception);
+		}
+		resources.sort(Comparator
+				.comparing((ResourceResponse resource) -> resource.path())
+				.thenComparing(ResourceResponse::name));
+		return resources;
 	}
 
 	@Override
@@ -197,6 +236,77 @@ class MinioResourceService implements ResourceService, DirectoryService {
 
 		putDirectoryMarker(storage.absolute(directory.value()));
 		return toResponse(directory.value(), 0L, true);
+	}
+
+	private ResourceResponse moveFile(UserStorage storage, ResourcePath source, ResourcePath target) {
+		var sourceObjectName = storage.absolute(source.value());
+		var targetObjectName = storage.absolute(target.value());
+		var sourceStat = statObject(sourceObjectName).orElseThrow(() -> notFound("Resource not found"));
+		if (statObject(targetObjectName).isPresent()) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Target resource already exists");
+		}
+		if (!directoryExists(storage, parentDirectory(target.value()))) {
+			throw notFound("Target parent directory not found");
+		}
+
+		copyObject(sourceObjectName, targetObjectName);
+		removeObject(sourceObjectName);
+		return toResponse(target.value(), sourceStat.size(), false);
+	}
+
+	private ResourceResponse moveDirectory(UserStorage storage, ResourcePath source, ResourcePath target) {
+		if (!directoryExists(storage, source.value())) {
+			throw notFound("Resource not found");
+		}
+		if (directoryExists(storage, target.value())) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Target resource already exists");
+		}
+		if (target.value().startsWith(source.value())) {
+			throw new IllegalArgumentException("Directory cannot be moved inside itself");
+		}
+		if (!directoryExists(storage, parentDirectory(target.value()))) {
+			throw notFound("Target parent directory not found");
+		}
+
+		copyDirectory(storage, source.value(), target.value());
+		removeDirectory(storage, source.value());
+		return toResponse(target.value(), 0L, true);
+	}
+
+	private void copyDirectory(UserStorage storage, String sourceDirectory, String targetDirectory) {
+		var sourcePrefix = storage.absolute(sourceDirectory);
+		try {
+			var objects = minioClient.listObjects(ListObjectsArgs.builder()
+					.bucket(properties.bucket())
+					.prefix(sourcePrefix)
+					.recursive(true)
+					.build());
+			for (var result : objects) {
+				var sourceObjectName = result.get().objectName();
+				var sourceRelative = storage.relative(sourceObjectName);
+				var targetRelative = targetDirectory + sourceRelative.substring(sourceDirectory.length());
+				copyObject(sourceObjectName, storage.absolute(targetRelative));
+			}
+		}
+		catch (Exception exception) {
+			throw new StorageOperationException("Failed to move directory", exception);
+		}
+	}
+
+	private void copyObject(String sourceObjectName, String targetObjectName) {
+		try {
+			minioClient.copyObject(CopyObjectArgs.builder()
+					.bucket(properties.bucket())
+					.object(targetObjectName)
+					.source(SourceObject.builder()
+							.bucket(properties.bucket())
+							.object(sourceObjectName)
+							.build())
+					.build());
+		}
+		catch (Exception exception) {
+			throw new StorageOperationException("Failed to copy resource", exception);
+		}
 	}
 
 	private ResourceResponse uploadFile(UserStorage storage, String directory, MultipartFile file) {
