@@ -27,7 +27,7 @@ public class DirectoryController {
 	}
 
 	@GetMapping
-	List<ResourceResponse> list(@RequestParam @NotBlank String path) {
+	List<ResourceResponse> list(@RequestParam(defaultValue = "") String path) {
 		return directoryService.list(path);
 	}
 

@@ -32,6 +32,11 @@ public class ApiExceptionHandler {
 		return ResponseEntity.badRequest().body(ErrorResponse.of(exception.getMessage()));
 	}
 
+	@ExceptionHandler(IllegalArgumentException.class)
+	ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException exception) {
+		return ResponseEntity.badRequest().body(ErrorResponse.of(exception.getMessage()));
+	}
+
 	@ExceptionHandler(ResponseStatusException.class)
 	ResponseEntity<ErrorResponse> handleResponseStatus(ResponseStatusException exception) {
 		var message = exception.getReason() == null ? exception.getStatusCode().toString() : exception.getReason();
