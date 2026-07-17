@@ -22,7 +22,8 @@
 - миграции схемы PostgreSQL через Flyway;
 - единый JSON-формат ошибок;
 - unit- и интеграционные тесты с PostgreSQL, Redis и MinIO в Testcontainers;
-- CI-сборка и тестирование в GitHub Actions.
+- CI-сборка и тестирование в GitHub Actions;
+- production Docker image и публикация версий в GitHub Container Registry.
 
 ## Технологии
 
@@ -36,6 +37,7 @@
 - HTML, CSS и JavaScript ES modules
 - JUnit 5 и Testcontainers
 - Maven Wrapper
+- Docker Compose и GitHub Container Registry
 - GitHub Actions
 
 ## Требования
@@ -80,6 +82,55 @@
 
 Остановить инфраструктуру можно командой `docker compose down`. Данные сохраняются
 в Docker volumes. Для их удаления используйте `docker compose down -v`.
+
+## Production-запуск
+
+Production-контур запускает готовый image приложения вместе с PostgreSQL, Redis и
+MinIO. Скопируйте пример переменных окружения и замените все значения `change-me`
+на случайно сгенерированные секреты:
+
+```bash
+cp .env.example .env
+```
+
+Затем загрузите image и запустите стек:
+
+```bash
+docker compose --env-file .env -f compose.prod.yaml pull
+docker compose --env-file .env -f compose.prod.yaml up -d
+docker compose --env-file .env -f compose.prod.yaml ps
+```
+
+Приложение доступно только на `127.0.0.1:${APP_PORT}`. Перед ним должен находиться
+HTTPS reverse proxy, например Caddy или Nginx. Production-профиль учитывает
+forwarded headers, включает graceful shutdown и secure session cookie, а Swagger
+и OpenAPI по умолчанию отключает. Для временного включения документации добавьте
+в окружение приложения `OPENAPI_ENABLED=true`.
+
+Проверка готовности приложения:
+
+```bash
+curl http://127.0.0.1:8080/actuator/health/readiness
+```
+
+Остановить production-контур без удаления данных:
+
+```bash
+docker compose --env-file .env -f compose.prod.yaml down
+```
+
+Workflow [`.github/workflows/publish-image.yml`](.github/workflows/publish-image.yml)
+собирает образы для `linux/amd64` и `linux/arm64`, добавляет SBOM и provenance и
+публикует их в `ghcr.io/listeik/cloud-data-base-first`. Выпуск версии запускается
+Git-тегом:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Для приватного GHCR package перед `docker compose pull` нужно выполнить
+`docker login ghcr.io` с Personal Access Token, имеющим право `read:packages`.
 
 ## Аутентификация
 
@@ -154,7 +205,8 @@ curl -b cookies.txt http://localhost:8080/api/user/me
 
 Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускает `mvn verify`
 на JDK 25 для каждого push в `main` и для pull request. Docker на GitHub runner
-используется интеграционными тестами через Testcontainers.
+используется интеграционными тестами через Testcontainers. Отдельный workflow
+`publish-image.yml` публикует versioned production images в GHCR.
 
 ## Конфигурация
 
@@ -162,10 +214,13 @@ Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускае
 [`src/main/resources/application.yml`](src/main/resources/application.yml). Основные
 параметры хранилища задаются через `app.storage`: endpoint, bucket, access key,
 secret key, шаблон пользовательского префикса, `user-quota` и `max-file-size`.
+Production-настройки находятся в
+[`src/main/resources/application-prod.yml`](src/main/resources/application-prod.yml)
+и получают адреса сервисов и секреты из переменных окружения.
 
 ## Дальнейшее развитие
 
-1. Подготовить production-профиль и автоматизированный deploy.
+1. Подключить целевой сервер и CD-деплой опубликованного image.
 2. Добавить метрики, трассировку и централизованные логи.
 3. Перейти к потоковой сборке ZIP для очень больших директорий.
 4. Добавить роли администратора и управление индивидуальными квотами.

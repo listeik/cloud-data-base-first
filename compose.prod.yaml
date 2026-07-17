@@ -17,7 +17,7 @@ services:
       STORAGE_USER_QUOTA: ${STORAGE_USER_QUOTA:-10GB}
       STORAGE_MAX_FILE_SIZE: ${STORAGE_MAX_FILE_SIZE:-128MB}
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
