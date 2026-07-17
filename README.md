@@ -23,7 +23,9 @@
 - единый JSON-формат ошибок;
 - unit- и интеграционные тесты с PostgreSQL, Redis и MinIO в Testcontainers;
 - CI-сборка и тестирование в GitHub Actions;
-- production Docker image и публикация версий в GitHub Container Registry.
+- production Docker image и публикация версий в GitHub Container Registry;
+- метрики Prometheus, OpenTelemetry-трассировка и централизованные ECS JSON-логи;
+- готовый dashboard и связанные между собой метрики, логи и трассы в Grafana.
 
 ## Технологии
 
@@ -38,6 +40,8 @@
 - JUnit 5 и Testcontainers
 - Maven Wrapper
 - Docker Compose и GitHub Container Registry
+- Micrometer Prometheus и OpenTelemetry OTLP
+- Prometheus, Grafana, Loki, Tempo и Alloy
 - GitHub Actions
 
 ## Требования
@@ -132,6 +136,39 @@ git push origin v0.1.0
 Для приватного GHCR package перед `docker compose pull` нужно выполнить
 `docker login ghcr.io` с Personal Access Token, имеющим право `read:packages`.
 
+## Наблюдаемость
+
+Дополнительный Compose-файл поднимает Prometheus для метрик, Tempo для трасс,
+Loki и Alloy для логов, а также Grafana с заранее настроенными источниками данных
+и dashboard `Cloud Data Base`:
+
+```bash
+docker compose --env-file .env \
+  -f compose.prod.yaml \
+  -f compose.observability.yaml up -d
+```
+
+Интерфейс Grafana доступен только локально на `127.0.0.1:${GRAFANA_PORT}`. Данные
+для входа задаются переменными `GRAFANA_ADMIN_USER` и `GRAFANA_ADMIN_PASSWORD`.
+Prometheus доступен на `127.0.0.1:${PROMETHEUS_PORT}`, Alloy — на
+`127.0.0.1:${ALLOY_PORT}`. Endpoint приложения `/actuator/prometheus` не публикуется
+наружу production-контура и опрашивается Prometheus внутри Docker-сети.
+
+Приложение экспортирует HTTP-метрики и прикладные счётчики загрузок, скачиваний и
+отклонённых загрузок. Трассы передаются в Tempo по OTLP/HTTP; доля сэмплирования
+задаётся через `TRACING_SAMPLING_PROBABILITY`. Production-логи выводятся в ECS JSON,
+а Alloy отправляет в Loki только контейнеры с observability-меткой. Для обнаружения
+контейнеров Alloy получает read-only доступ к Docker socket; на общем production-host
+его следует заменить более изолированным сборщиком или socket proxy.
+
+Остановить весь контур без удаления данных:
+
+```bash
+docker compose --env-file .env \
+  -f compose.prod.yaml \
+  -f compose.observability.yaml down
+```
+
 ## Аутентификация
 
 API использует cookie-based HTTP-сессии. Только регистрация и вход доступны без
@@ -192,7 +229,7 @@ curl -b cookies.txt http://localhost:8080/api/user/me
 
 Для интеграционных тестов нужен запущенный Docker. Testcontainers автоматически
 поднимает изолированные PostgreSQL, Redis и MinIO; локальный `compose.yaml` во время
-тестов не используется. Сейчас набор содержит 24 теста, включая:
+тестов не используется. Сейчас набор содержит 25 тестов, включая:
 
 - создание и инвалидирование Redis-backed сессии;
 - запрет повторной регистрации с тем же username;
@@ -200,6 +237,7 @@ curl -b cookies.txt http://localhost:8080/api/user/me
 - изоляцию файлов разных пользователей;
 - контроль квоты и максимального размера файла;
 - пагинацию каталогов и поиска;
+- публикацию Prometheus endpoint и прикладных метрик;
 - доступность OpenAPI и frontend-ресурсов;
 - unit-тесты сервисов аутентификации, путей и хранилища.
 
@@ -221,6 +259,5 @@ Production-настройки находятся в
 ## Дальнейшее развитие
 
 1. Подключить целевой сервер и CD-деплой опубликованного image.
-2. Добавить метрики, трассировку и централизованные логи.
-3. Перейти к потоковой сборке ZIP для очень больших директорий.
-4. Добавить роли администратора и управление индивидуальными квотами.
+2. Перейти к потоковой сборке ZIP для очень больших директорий.
+3. Добавить роли администратора и управление индивидуальными квотами.

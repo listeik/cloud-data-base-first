@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Cloud Data Base
+    orgId: 1
+    folder: Cloud Data Base
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

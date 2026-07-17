@@ -46,15 +46,18 @@ class MinioResourceService implements ResourceService, DirectoryService {
 	private final MinioClient minioClient;
 	private final StorageProperties properties;
 	private final CurrentUserProvider currentUserProvider;
+	private final StorageMetrics metrics;
 	private final ReentrantLock[] uploadLocks = createUploadLocks();
 
 	MinioResourceService(
 			MinioClient minioClient,
 			StorageProperties properties,
-			CurrentUserProvider currentUserProvider) {
+			CurrentUserProvider currentUserProvider,
+			StorageMetrics metrics) {
 		this.minioClient = minioClient;
 		this.properties = properties;
 		this.currentUserProvider = currentUserProvider;
+		this.metrics = metrics;
 	}
 
 	@Override
@@ -109,6 +112,7 @@ class MinioResourceService implements ResourceService, DirectoryService {
 					.bucket(properties.bucket())
 					.object(objectName)
 					.build());
+			metrics.recordDownload(stat.size());
 			return new DownloadedResource(
 					resourceName(resource.value()),
 					MediaType.APPLICATION_OCTET_STREAM,
@@ -213,18 +217,21 @@ class MinioResourceService implements ResourceService, DirectoryService {
 		long uploadBytes = 0;
 		for (var file : files) {
 			if (file.getSize() > properties.maxFileSize().toBytes()) {
+				metrics.recordUploadRejected("file-too-large");
 				throw payloadTooLarge("File exceeds the maximum allowed size");
 			}
 			try {
 				uploadBytes = Math.addExact(uploadBytes, file.getSize());
 			}
 			catch (ArithmeticException exception) {
+				metrics.recordUploadRejected("request-too-large");
 				throw payloadTooLarge("Upload is too large");
 			}
 		}
 
 		var usedBytes = usedBytes(storage);
 		if (uploadBytes > properties.userQuota().toBytes() - usedBytes) {
+			metrics.recordUploadRejected("quota-exceeded");
 			throw payloadTooLarge("Storage quota exceeded");
 		}
 	}
@@ -259,6 +266,7 @@ class MinioResourceService implements ResourceService, DirectoryService {
 		}
 		try {
 			var archive = buildZipArchive(storage, resource.value());
+			metrics.recordDownload(archive.length);
 			return new DownloadedResource(
 					resourceName(resource.value()) + ".zip",
 					MediaType.parseMediaType("application/zip"),
@@ -465,6 +473,7 @@ class MinioResourceService implements ResourceService, DirectoryService {
 					.stream(input, Long.valueOf(file.getSize()), -1L)
 					.contentType(contentType(file))
 					.build());
+			metrics.recordUpload(file.getSize());
 			return toResponse(target.value(), file.getSize(), false);
 		}
 		catch (IOException exception) {
