@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Многопользовательское файловое облако">
+  <title>Cloud Data Base</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <main id="auth-view" class="auth-view">
+    <section class="auth-panel" aria-labelledby="auth-title">
+      <div class="brand brand-large">
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span>Cloud Data Base</span>
+      </div>
+      <h1 id="auth-title">Ваши файлы под рукой</h1>
+      <p class="auth-copy">Войдите в своё облако или создайте новый аккаунт.</p>
+
+      <div class="auth-tabs" role="tablist" aria-label="Режим авторизации">
+        <button id="sign-in-tab" class="auth-tab active" type="button" role="tab" aria-selected="true">Вход</button>
+        <button id="sign-up-tab" class="auth-tab" type="button" role="tab" aria-selected="false">Регистрация</button>
+      </div>
+
+      <form id="auth-form" class="auth-form">
+        <label>
+          <span>Имя пользователя</span>
+          <input id="username" name="username" autocomplete="username" minlength="3" maxlength="64"
+                 pattern="[A-Za-z0-9._-]+" required placeholder="ratmir">
+        </label>
+        <label>
+          <span>Пароль</span>
+          <input id="password" name="password" type="password" autocomplete="current-password"
+                 minlength="8" maxlength="128" required placeholder="Минимум 8 символов">
+        </label>
+        <p id="auth-error" class="form-error" role="alert"></p>
+        <button id="auth-submit" class="button primary full" type="submit">Войти</button>
+      </form>
+    </section>
+  </main>
+
+  <div id="app-view" class="app-view" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span>Cloud Data Base</span>
+      </div>
+      <div class="account">
+        <span id="current-user" class="username"></span>
+        <a class="text-link" href="/swagger-ui.html" target="_blank" rel="noreferrer">API</a>
+        <button id="sign-out" class="button ghost" type="button">Выйти</button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar">
+        <button id="all-files" class="nav-item active" type="button">
+          <span aria-hidden="true">▦</span>
+          Все файлы
+        </button>
+
+        <section class="storage-meter" aria-labelledby="storage-title">
+          <div class="storage-heading">
+            <h2 id="storage-title">Хранилище</h2>
+            <span id="storage-percent">0%</span>
+          </div>
+          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="storage-progress"></span>
+          </div>
+          <p id="storage-summary">Загрузка данных...</p>
+        </section>
+      </aside>
+
+      <main class="content">
+        <div class="content-header">
+          <div>
+            <nav id="breadcrumbs" class="breadcrumbs" aria-label="Путь к каталогу"></nav>
+            <h1 id="view-title">Все файлы</h1>
+          </div>
+          <form id="search-form" class="search" role="search">
+            <input id="search-input" type="search" minlength="1" placeholder="Поиск файлов" aria-label="Поиск файлов">
+            <button class="button secondary" type="submit">Найти</button>
+          </form>
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button id="upload-button" class="button primary" type="button">Загрузить</button>
+            <button id="new-folder-button" class="button secondary" type="button">+ Папка</button>
+            <input id="file-input" type="file" multiple hidden>
+          </div>
+          <button id="refresh-button" class="button icon-button" type="button" title="Обновить" aria-label="Обновить">↻</button>
+        </div>
+
+        <div id="search-banner" class="search-banner" hidden>
+          <span>Результаты поиска: <strong id="search-query"></strong></span>
+          <button id="clear-search" class="text-link button-link" type="button">Сбросить</button>
+        </div>
+
+        <section class="resource-panel" aria-label="Файлы и папки">
+          <div id="loading-state" class="state-message">Загрузка...</div>
+          <div id="empty-state" class="empty-state" hidden>
+            <div class="empty-symbol" aria-hidden="true">□</div>
+            <h2>Здесь пока пусто</h2>
+            <p>Загрузите файлы или создайте первую папку.</p>
+          </div>
+          <div id="resource-list" class="resource-list" hidden>
+            <div class="resource-row resource-head" aria-hidden="true">
+              <span>Имя</span>
+              <span>Размер</span>
+              <span>Тип</span>
+              <span></span>
+            </div>
+            <div id="resource-rows"></div>
+          </div>
+        </section>
+
+        <nav id="pagination" class="pagination" aria-label="Пагинация" hidden>
+          <button id="previous-page" class="button secondary" type="button">Назад</button>
+          <span id="page-label"></span>
+          <button id="next-page" class="button secondary" type="button">Вперёд</button>
+        </nav>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="folder-dialog" class="dialog">
+    <form id="folder-form" method="dialog">
+      <div class="dialog-header">
+        <h2>Новая папка</h2>
+        <button class="button icon-button dialog-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <label>
+        <span>Название</span>
+        <input id="folder-name" required maxlength="128" placeholder="Документы">
+      </label>
+      <p id="folder-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="button secondary dialog-close" type="button">Отмена</button>
+        <button class="button primary" type="submit">Создать</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="move-dialog" class="dialog">
+    <form id="move-form" method="dialog">
+      <div class="dialog-header">
+        <h2>Переместить или переименовать</h2>
+        <button class="button icon-button dialog-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <label>
+        <span>Новый полный путь</span>
+        <input id="move-path" required maxlength="512">
+      </label>
+      <p class="field-note">Для папки путь должен заканчиваться символом /</p>
+      <p id="move-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="button secondary dialog-close" type="button">Отмена</button>
+        <button class="button primary" type="submit">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>

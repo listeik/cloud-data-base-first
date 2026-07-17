@@ -86,6 +86,11 @@ public abstract class AbstractIntegrationTest {
 		return http.send(request(path, sessionCookie).GET().build(), HttpResponse.BodyHandlers.ofString());
 	}
 
+	protected HttpResponse<String> get(String path, String sessionCookie, String accept)
+			throws IOException, InterruptedException {
+		return http.send(request(path, sessionCookie, accept).GET().build(), HttpResponse.BodyHandlers.ofString());
+	}
+
 	protected HttpResponse<byte[]> getBytes(String path, String sessionCookie)
 			throws IOException, InterruptedException {
 		return http.send(request(path, sessionCookie).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
@@ -151,8 +156,12 @@ public abstract class AbstractIntegrationTest {
 	}
 
 	private HttpRequest.Builder request(String path, String sessionCookie) {
+		return request(path, sessionCookie, "application/json");
+	}
+
+	private HttpRequest.Builder request(String path, String sessionCookie, String accept) {
 		var builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
-				.header("Accept", "application/json");
+				.header("Accept", accept);
 		if (sessionCookie != null) {
 			builder.header("Cookie", sessionCookie);
 		}
