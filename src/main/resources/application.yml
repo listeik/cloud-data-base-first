@@ -20,8 +20,9 @@ spring:
       max-file-size: 128MB
       max-request-size: 512MB
   session:
-    redis:
-      namespace: cloud-storage:sessions
+    data:
+      redis:
+        namespace: cloud-storage:sessions
 
 server:
   error:
