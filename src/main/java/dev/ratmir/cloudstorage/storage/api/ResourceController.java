@@ -6,6 +6,10 @@ import java.util.List;
 import jakarta.validation.constraints.NotBlank;
 
 import dev.ratmir.cloudstorage.storage.service.ResourceService;
+import dev.ratmir.cloudstorage.config.OpenApiConfig;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.ContentDisposition;
@@ -27,6 +31,8 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequestMapping("/api/resource")
+@Tag(name = "Resources")
+@SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE)
 public class ResourceController {
 
 	private final ResourceService resourceService;
@@ -36,17 +42,20 @@ public class ResourceController {
 	}
 
 	@GetMapping
+	@Operation(summary = "Get resource metadata")
 	ResourceResponse get(@RequestParam @NotBlank String path) {
 		return resourceService.get(path);
 	}
 
 	@DeleteMapping
 	@ResponseStatus(HttpStatus.NO_CONTENT)
+	@Operation(summary = "Delete a file or directory")
 	void delete(@RequestParam @NotBlank String path) {
 		resourceService.delete(path);
 	}
 
 	@GetMapping("/download")
+	@Operation(summary = "Download a file or a directory as ZIP")
 	ResponseEntity<InputStreamResource> download(@RequestParam @NotBlank String path) {
 		var download = resourceService.download(path);
 		var disposition = ContentDisposition.attachment()
@@ -60,17 +69,20 @@ public class ResourceController {
 	}
 
 	@GetMapping("/move")
+	@Operation(summary = "Move or rename a resource")
 	ResourceResponse move(@RequestParam @NotBlank String from, @RequestParam @NotBlank String to) {
 		return resourceService.move(from, to);
 	}
 
 	@GetMapping("/search")
+	@Operation(summary = "Search resources by name")
 	List<ResourceResponse> search(@RequestParam @NotBlank String query) {
 		return resourceService.search(query);
 	}
 
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@ResponseStatus(HttpStatus.CREATED)
+	@Operation(summary = "Upload one or more files")
 	List<ResourceResponse> upload(
 			@RequestParam(defaultValue = "") String path,
 			@RequestPart("files") List<MultipartFile> files) {
