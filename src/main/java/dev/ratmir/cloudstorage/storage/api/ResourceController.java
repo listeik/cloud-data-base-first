@@ -4,6 +4,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import dev.ratmir.cloudstorage.storage.service.ResourceService;
 import dev.ratmir.cloudstorage.config.OpenApiConfig;
@@ -78,6 +80,15 @@ public class ResourceController {
 	@Operation(summary = "Search resources by name")
 	List<ResourceResponse> search(@RequestParam @NotBlank String query) {
 		return resourceService.search(query);
+	}
+
+	@GetMapping("/search/page")
+	@Operation(summary = "Search resources by name with pagination")
+	ResourcePageResponse searchPage(
+			@RequestParam @NotBlank String query,
+			@RequestParam(defaultValue = "0") @Min(0) int page,
+			@RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+		return ResourcePageResponse.from(resourceService.search(query), page, size);
 	}
 
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

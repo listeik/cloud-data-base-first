@@ -3,6 +3,8 @@ package dev.ratmir.cloudstorage.storage.api;
 import java.util.List;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import dev.ratmir.cloudstorage.storage.service.DirectoryService;
 import dev.ratmir.cloudstorage.config.OpenApiConfig;
@@ -36,6 +38,15 @@ public class DirectoryController {
 	@Operation(summary = "List directory contents")
 	List<ResourceResponse> list(@RequestParam(defaultValue = "") String path) {
 		return directoryService.list(path);
+	}
+
+	@GetMapping("/page")
+	@Operation(summary = "List directory contents with pagination")
+	ResourcePageResponse listPage(
+			@RequestParam(defaultValue = "") String path,
+			@RequestParam(defaultValue = "0") @Min(0) int page,
+			@RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+		return ResourcePageResponse.from(directoryService.list(path), page, size);
 	}
 
 	@PostMapping

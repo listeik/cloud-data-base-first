@@ -48,8 +48,16 @@ Hello from Cloud Data Base
 GET {{baseUrl}}/api/directory?path=documents/
 Cookie: {{sessionCookie}}
 
+### List a directory page
+GET {{baseUrl}}/api/directory/page?path=documents/&page=0&size=20
+Cookie: {{sessionCookie}}
+
 ### Search resources
 GET {{baseUrl}}/api/resource/search?query=hello
+Cookie: {{sessionCookie}}
+
+### Search resources with pagination
+GET {{baseUrl}}/api/resource/search/page?query=hello&page=0&size=20
 Cookie: {{sessionCookie}}
 
 ### Move or rename a resource
