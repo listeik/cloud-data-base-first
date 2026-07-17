@@ -3,6 +3,7 @@ package dev.ratmir.cloudstorage.storage.service;
 import java.util.List;
 
 import dev.ratmir.cloudstorage.storage.api.ResourceResponse;
+import dev.ratmir.cloudstorage.storage.api.StorageUsageResponse;
 
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,4 +20,6 @@ public interface ResourceService {
 	List<ResourceResponse> search(String query);
 
 	List<ResourceResponse> upload(String path, List<MultipartFile> files);
+
+	StorageUsageResponse usage();
 }

@@ -70,6 +70,8 @@ public abstract class AbstractIntegrationTest {
 		registry.add("app.storage.secret-key", MINIO::getPassword);
 		registry.add("app.storage.bucket", () -> "integration-user-files");
 		registry.add("app.storage.user-root-prefix-pattern", () -> "it-user-%d-files");
+		registry.add("app.storage.user-quota", () -> "64B");
+		registry.add("app.storage.max-file-size", () -> "32B");
 	}
 
 	protected String signUp(String username) throws IOException, InterruptedException {

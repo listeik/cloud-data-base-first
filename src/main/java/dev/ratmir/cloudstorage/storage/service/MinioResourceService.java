@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -16,6 +17,7 @@ import dev.ratmir.cloudstorage.storage.StorageOperationException;
 import dev.ratmir.cloudstorage.storage.StorageProperties;
 import dev.ratmir.cloudstorage.storage.api.ResourceResponse;
 import dev.ratmir.cloudstorage.storage.api.ResourceType;
+import dev.ratmir.cloudstorage.storage.api.StorageUsageResponse;
 import io.minio.CopyObjectArgs;
 import io.minio.GetObjectArgs;
 import io.minio.ListObjectsArgs;
@@ -39,9 +41,12 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 class MinioResourceService implements ResourceService, DirectoryService {
 
+	private static final int UPLOAD_LOCK_COUNT = 64;
+
 	private final MinioClient minioClient;
 	private final StorageProperties properties;
 	private final CurrentUserProvider currentUserProvider;
+	private final ReentrantLock[] uploadLocks = createUploadLocks();
 
 	MinioResourceService(
 			MinioClient minioClient,
@@ -177,11 +182,75 @@ class MinioResourceService implements ResourceService, DirectoryService {
 			throw notFound("Upload directory not found");
 		}
 
-		var uploaded = new ArrayList<ResourceResponse>();
-		for (var file : files) {
-			uploaded.add(uploadFile(storage, directory.value(), file));
+		var lock = uploadLocks[Math.floorMod(storage.userId(), UPLOAD_LOCK_COUNT)];
+		lock.lock();
+		try {
+			validateUploadLimits(storage, files);
+			var uploaded = new ArrayList<ResourceResponse>();
+			for (var file : files) {
+				uploaded.add(uploadFile(storage, directory.value(), file));
+			}
+			return uploaded;
 		}
-		return uploaded;
+		finally {
+			lock.unlock();
+		}
+	}
+
+	@Override
+	public StorageUsageResponse usage() {
+		var storage = currentStorage();
+		var usedBytes = usedBytes(storage);
+		var quotaBytes = properties.userQuota().toBytes();
+		return new StorageUsageResponse(
+				usedBytes,
+				quotaBytes,
+				Math.max(0, quotaBytes - usedBytes),
+				properties.maxFileSize().toBytes());
+	}
+
+	private void validateUploadLimits(UserStorage storage, List<MultipartFile> files) {
+		long uploadBytes = 0;
+		for (var file : files) {
+			if (file.getSize() > properties.maxFileSize().toBytes()) {
+				throw payloadTooLarge("File exceeds the maximum allowed size");
+			}
+			try {
+				uploadBytes = Math.addExact(uploadBytes, file.getSize());
+			}
+			catch (ArithmeticException exception) {
+				throw payloadTooLarge("Upload is too large");
+			}
+		}
+
+		var usedBytes = usedBytes(storage);
+		if (uploadBytes > properties.userQuota().toBytes() - usedBytes) {
+			throw payloadTooLarge("Storage quota exceeded");
+		}
+	}
+
+	private long usedBytes(UserStorage storage) {
+		long total = 0;
+		try {
+			var objects = minioClient.listObjects(ListObjectsArgs.builder()
+					.bucket(properties.bucket())
+					.prefix(storage.rootPrefix())
+					.recursive(true)
+					.build());
+			for (var result : objects) {
+				var item = result.get();
+				if (!item.isDir()) {
+					total = Math.addExact(total, item.size());
+				}
+			}
+			return total;
+		}
+		catch (ArithmeticException exception) {
+			throw new StorageOperationException("Storage usage exceeds supported size", exception);
+		}
+		catch (Exception exception) {
+			throw new StorageOperationException("Failed to calculate storage usage", exception);
+		}
 	}
 
 	private DownloadedResource downloadDirectory(UserStorage storage, ResourcePath resource) {
@@ -497,7 +566,15 @@ class MinioResourceService implements ResourceService, DirectoryService {
 		if (user.getId() == null) {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated");
 		}
-		return new UserStorage(properties.userRootPrefix(user.getId()) + "/");
+		return new UserStorage(user.getId(), properties.userRootPrefix(user.getId()) + "/");
+	}
+
+	private static ReentrantLock[] createUploadLocks() {
+		var locks = new ReentrantLock[UPLOAD_LOCK_COUNT];
+		for (var index = 0; index < locks.length; index++) {
+			locks[index] = new ReentrantLock();
+		}
+		return locks;
 	}
 
 	private static ResourceResponse toResponse(String relativePath, long size, boolean directory) {
@@ -542,7 +619,11 @@ class MinioResourceService implements ResourceService, DirectoryService {
 		return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
 	}
 
-	private record UserStorage(String rootPrefix) {
+	private static ResponseStatusException payloadTooLarge(String message) {
+		return new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, message);
+	}
+
+	private record UserStorage(long userId, String rootPrefix) {
 
 		String absolute(String relativePath) {
 			return rootPrefix + relativePath;

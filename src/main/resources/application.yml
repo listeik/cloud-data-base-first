@@ -47,3 +47,5 @@ app:
     access-key: minioadmin
     secret-key: minioadmin
     user-root-prefix-pattern: user-%d-files
+    user-quota: 1GB
+    max-file-size: 128MB
