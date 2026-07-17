@@ -1,7 +1,9 @@
 # Cloud Data Base
 
-Учебный backend многопользовательского файлового облака. Пользователи и метаданные
-аутентификации хранятся в PostgreSQL, HTTP-сессии — в Redis, файлы — в MinIO.
+[![CI](https://github.com/listeik/cloud-data-base-first/actions/workflows/ci.yml/badge.svg)](https://github.com/listeik/cloud-data-base-first/actions/workflows/ci.yml)
+
+Многопользовательское файловое облако со встроенным web-интерфейсом. Пользователи
+хранятся в PostgreSQL, HTTP-сессии — в Redis, файлы — в MinIO.
 
 ## Возможности
 
@@ -13,9 +15,14 @@
 - получение информации о ресурсе;
 - скачивание файла или директории в виде ZIP-архива;
 - поиск, перемещение и удаление ресурсов;
+- постраничный просмотр директорий и результатов поиска;
+- пользовательская квота и ограничение размера отдельного файла;
+- адаптивный файловый frontend без отдельного сервера;
+- OpenAPI-контракт, Swagger UI и HTTP-коллекция запросов;
 - миграции схемы PostgreSQL через Flyway;
 - единый JSON-формат ошибок;
-- unit- и интеграционные тесты с PostgreSQL, Redis и MinIO в Testcontainers.
+- unit- и интеграционные тесты с PostgreSQL, Redis и MinIO в Testcontainers;
+- CI-сборка и тестирование в GitHub Actions.
 
 ## Технологии
 
@@ -25,8 +32,11 @@
 - PostgreSQL 18 и Flyway
 - Redis 8
 - MinIO (S3-compatible object storage)
+- springdoc-openapi 3 и Swagger UI
+- HTML, CSS и JavaScript ES modules
 - JUnit 5 и Testcontainers
 - Maven Wrapper
+- GitHub Actions
 
 ## Требования
 
@@ -61,7 +71,8 @@
 
 | Сервис | Адрес | Данные для входа |
 |---|---|---|
-| Приложение | `http://localhost:8080` | — |
+| Файловый интерфейс | `http://localhost:8080` | зарегистрированный пользователь |
+| Swagger UI | `http://localhost:8080/swagger-ui.html` | session cookie |
 | PostgreSQL | `localhost:5433/cloud_storage` | `cloud_storage` / `cloud_storage` |
 | Redis | `localhost:6379` | без пароля |
 | MinIO API | `http://localhost:9000` | `minioadmin` / `minioadmin` |
@@ -102,16 +113,23 @@ curl -b cookies.txt http://localhost:8080/api/user/me
 | `POST` | `/api/auth/sign-out` | Выход и инвалидирование сессии |
 | `GET` | `/api/user/me` | Текущий пользователь |
 | `GET` | `/api/directory?path=docs/` | Содержимое директории |
+| `GET` | `/api/directory/page?path=docs/&page=0&size=20` | Страница содержимого директории |
 | `POST` | `/api/directory?path=docs/` | Создание директории |
 | `GET` | `/api/resource?path=docs/file.txt` | Информация о ресурсе |
 | `POST` | `/api/resource?path=docs/` | Загрузка файлов, multipart-поле `files` |
 | `GET` | `/api/resource/download?path=docs/file.txt` | Скачивание файла или директории |
 | `GET` | `/api/resource/search?query=file` | Поиск по имени |
+| `GET` | `/api/resource/search/page?query=file&page=0&size=20` | Страница результатов поиска |
 | `GET` | `/api/resource/move?from=old&to=new` | Перемещение или переименование |
 | `DELETE` | `/api/resource?path=docs/file.txt` | Удаление ресурса |
+| `GET` | `/api/storage/usage` | Занятое место, квота и лимит файла |
 
 Корневая директория задаётся пустым `path`. Пути директорий оканчиваются символом
 `/`, например `documents/reports/`.
+
+Интерактивная документация доступна в Swagger UI. Машиночитаемый OpenAPI JSON
+находится по адресу `/v3/api-docs`. Для ручной проверки из IDE можно использовать
+[`requests/cloud-storage.http`](requests/cloud-storage.http).
 
 ## Тестирование
 
@@ -123,25 +141,31 @@ curl -b cookies.txt http://localhost:8080/api/user/me
 
 Для интеграционных тестов нужен запущенный Docker. Testcontainers автоматически
 поднимает изолированные PostgreSQL, Redis и MinIO; локальный `compose.yaml` во время
-тестов не используется. Сейчас набор содержит 15 тестов, включая:
+тестов не используется. Сейчас набор содержит 24 теста, включая:
 
 - создание и инвалидирование Redis-backed сессии;
 - запрет повторной регистрации с тем же username;
 - полный жизненный цикл файла в MinIO;
 - изоляцию файлов разных пользователей;
+- контроль квоты и максимального размера файла;
+- пагинацию каталогов и поиска;
+- доступность OpenAPI и frontend-ресурсов;
 - unit-тесты сервисов аутентификации, путей и хранилища.
+
+Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускает `mvn verify`
+на JDK 25 для каждого push в `main` и для pull request. Docker на GitHub runner
+используется интеграционными тестами через Testcontainers.
 
 ## Конфигурация
 
 Настройки локального окружения находятся в
 [`src/main/resources/application.yml`](src/main/resources/application.yml). Основные
 параметры хранилища задаются через `app.storage`: endpoint, bucket, access key,
-secret key и шаблон пользовательского префикса.
+secret key, шаблон пользовательского префикса, `user-quota` и `max-file-size`.
 
-## Следующие этапы
+## Дальнейшее развитие
 
-1. Добавить OpenAPI/Swagger и коллекцию запросов для ручной проверки API.
-2. Ввести пользовательские квоты и ограничения суммарного объёма хранилища.
-3. Добавить пагинацию списков и результатов поиска.
-4. Подготовить frontend для работы с облаком.
-5. Добавить CI-пайплайн для сборки и тестов.
+1. Подготовить production-профиль и автоматизированный deploy.
+2. Добавить метрики, трассировку и централизованные логи.
+3. Перейти к потоковой сборке ZIP для очень больших директорий.
+4. Добавить роли администратора и управление индивидуальными квотами.
